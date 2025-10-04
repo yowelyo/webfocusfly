@@ -36,14 +36,15 @@
 
           <div class="card setup-card">
             <div class="field-group">
-              <label for="input-departure">Aeropuerto de salida</label>
-              <input id="input-departure" list="airports-list" placeholder="Escribe código o nombre (ej. MAD o Madrid)" autocomplete="off" />
+              <label>1) Aeropuerto de salida</label>
+              <div class="inline">
+                <button id="btn-pick-departure" class="picker">Elegir aeropuerto en el mapa</button>
+                <div id="selected-departure" class="selection-tag">No seleccionado</div>
+              </div>
             </div>
 
-            <datalist id="airports-list"></datalist>
-
             <div class="field-group">
-              <label for="select-duration">Duración del vuelo (estudio)</label>
+              <label>2) Duración del vuelo (estudio)</label>
               <select id="select-duration">
                 <option value="25">25 min (Pomodoro)</option>
                 <option value="45">45 min</option>
@@ -54,7 +55,7 @@
             </div>
 
             <div class="field-group">
-              <label>Opciones de destino sugeridas según la duración</label>
+              <label>3) Opciones de destino sugeridas (según salida y duración)</label>
               <div id="dest-suggestions" class="suggestions-grid"></div>
               <small class="helper">Elige un destino sugerido; cambia la duración para ver otras opciones.</small>
             </div>
@@ -67,6 +68,25 @@
           <footer class="app-footer">
             <span>Sin registro. Todo en tu navegador.</span>
           </footer>
+        </div>
+      </section>
+
+      <!-- Airport Picker Overlay -->
+      <section id="airport-picker" class="overlay" aria-hidden="true">
+        <div class="overlay-content">
+          <div class="overlay-header">
+            <h2>Elige aeropuerto de salida</h2>
+            <button id="ap-close" class="ghost">Cerrar</button>
+          </div>
+          <div class="overlay-body">
+            <div id="airport-map"></div>
+          </div>
+          <div class="overlay-footer">
+            <div class="overlay-selection" id="ap-selection">No seleccionado</div>
+            <div class="spacer"></div>
+            <button id="ap-cancel" class="ghost">Cancelar</button>
+            <button id="ap-confirm" class="primary" disabled>Confirmar</button>
+          </div>
         </div>
       </section>
 
@@ -111,6 +131,7 @@
               <span class="label">Tiempo restante</span>
               <span class="time" id="timer-display">00:00:00</span>
             </div>
+            <div class="progress" aria-hidden="true"><div id="progress-bar" class="bar"></div></div>
             <div class="hud-actions">
               <button id="btn-pause" class="ghost">Pausar</button>
               <button id="btn-cancel" class="ghost">Cancelar</button>

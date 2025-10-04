@@ -44,6 +44,9 @@ p { margin: 0; opacity: 0.9; }
 }
 
 .setup-card { display: grid; gap: 16px; }
+.inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.picker { font-weight: 600; }
+.selection-tag { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); }
 
 .field-group { display: grid; gap: 8px; }
 label { color: var(--muted); font-size: 12px; letter-spacing: 0.4px; }
@@ -79,6 +82,35 @@ input::placeholder { color: #93a6cf; opacity: 0.7; }
 .suggestion.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(118, 209, 255, 0.25) inset; }
 .suggestion .title { font-weight: 600; letter-spacing: 0.3px; }
 .suggestion .subtitle { color: var(--muted); font-size: 12px; }
+
+/* Overlay Airport Picker */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 6, 14, 0.65);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+.overlay.visible { display: flex; }
+.overlay-content {
+  width: min(1000px, 96vw);
+  height: min(700px, 92vh);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+.overlay-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.overlay-body { height: 100%; }
+#airport-map { height: 100%; width: 100%; border-bottom: 1px solid var(--border); border-top-left-radius: 16px; border-top-right-radius: 16px; overflow: hidden; }
+.overlay-footer { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+.overlay-selection { color: var(--muted); }
+.spacer { flex: 1; }
 
 .actions { display: flex; justify-content: flex-end; margin-top: 8px; }
 button {
@@ -136,6 +168,21 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .audio-controls { display: flex; align-items: center; gap: 16px; }
 .audio-controls label { display: inline-flex; align-items: center; gap: 8px; }
 .audio-controls .volume { gap: 8px; }
+
+/* Progress */
+.progress {
+  height: 8px;
+  width: 160px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.progress > .bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent) 0%, #6bdcc2 100%);
+}
 
 /* Leaflet plane marker */
 .leaflet-div-icon.plane-marker {

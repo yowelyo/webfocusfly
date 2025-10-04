@@ -61,6 +61,7 @@ const state = {
   routeLine: null,
   planeMarker: null,
   rafId: null,
+  flightPath: null, // array de [lat, lng] geodésico
   timer: {
     isRunning: false,
     isPaused: false,
@@ -75,6 +76,11 @@ const state = {
     whiteNoise: { source: null, gain: null },
     engine: { source: null, filter: null, lfo: null, lfoGain: null, gain: null },
     volume: 0.25,
+  },
+  picker: {
+    map: null,
+    markers: new Map(), // code -> marker
+    selected: null, // airport object seleccionado en overlay
   },
 };
 
@@ -106,6 +112,50 @@ function computeBearingDegrees(lat1, lng1, lat2, lng2) {
 }
 
 function interpolateLinear(a, b, t) { return a + (b - a) * t; }
+
+// Distancia gran círculo (Haversine) en km
+function greatCircleDistanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // km
+  const φ1 = degreesToRadians(lat1);
+  const φ2 = degreesToRadians(lat2);
+  const Δφ = degreesToRadians(lat2 - lat1);
+  const Δλ = degreesToRadians(lon2 - lon1);
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  const c = 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+  return R * c;
+}
+
+// Puntos intermedios de geodésica mediante slerp
+function generateGreatCirclePoints(lat1, lon1, lat2, lon2, segments = 128) {
+  const φ1 = degreesToRadians(lat1);
+  const λ1 = degreesToRadians(lon1);
+  const φ2 = degreesToRadians(lat2);
+  const λ2 = degreesToRadians(lon2);
+
+  const sinφ1 = Math.sin(φ1), cosφ1 = Math.cos(φ1);
+  const sinφ2 = Math.sin(φ2), cosφ2 = Math.cos(φ2);
+  const Δλ = λ2 - λ1;
+  const a = Math.sin((φ2 - φ1) / 2) ** 2 + cosφ1 * cosφ2 * Math.sin(Δλ / 2) ** 2;
+  const δ = 2 * Math.asin(Math.min(1, Math.sqrt(a))); // angular distance
+
+  if (δ === 0) return [[lat1, lon1]];
+
+  const points = [];
+  for (let i = 0; i <= segments; i++) {
+    const f = i / segments;
+    const A = Math.sin((1 - f) * δ) / Math.sin(δ);
+    const B = Math.sin(f * δ) / Math.sin(δ);
+
+    const x = A * cosφ1 * Math.cos(λ1) + B * cosφ2 * Math.cos(λ2);
+    const y = A * cosφ1 * Math.sin(λ1) + B * cosφ2 * Math.sin(λ2);
+    const z = A * sinφ1 + B * sinφ2;
+
+    const φi = Math.atan2(z, Math.sqrt(x * x + y * y));
+    const λi = Math.atan2(y, x);
+    points.push([radiansToDegrees(φi), radiansToDegrees(λi)]);
+  }
+  return points;
+}
 
 function lookupAirportByCode(code) {
   const u = (code || "").trim().toUpperCase();
@@ -161,24 +211,13 @@ function setView(id) {
   document.getElementById(`view-${id}`).classList.add("visible");
 }
 
-function hydrateAirportDatalist() {
-  const dl = document.getElementById("airports-list");
-  const frag = document.createDocumentFragment();
-  AIRPORTS.forEach(a => {
-    const opt = document.createElement("option");
-    opt.value = `${a.code} — ${a.city}, ${a.country}`;
-    opt.label = `${a.name}`;
-    frag.appendChild(opt);
-  });
-  dl.innerHTML = "";
-  dl.appendChild(frag);
-}
+// (Se elimina datalist; ahora hay selector visual)
 
 function syncSetupFormFromState() {
-  const depInput = document.getElementById("input-departure");
+  const depTag = document.getElementById("selected-departure");
   const durSelect = document.getElementById("select-duration");
 
-  depInput.value = state.departure ? airportFullName(state.departure) : "";
+  depTag.textContent = state.departure ? airportFullName(state.departure) : "No seleccionado";
   durSelect.value = String(state.durationMinutes);
 
   renderDestinationSuggestions();
@@ -192,26 +231,24 @@ function validateGenerateButton() {
 }
 
 function attachSetupHandlers() {
-  const depInput = document.getElementById("input-departure");
   const durSelect = document.getElementById("select-duration");
   const genBtn = document.getElementById("btn-generate");
+  const btnPick = document.getElementById("btn-pick-departure");
 
   const onChange = () => {
-    state.departure = searchAirportFromInput(depInput.value);
     state.durationMinutes = parseInt(durSelect.value, 10);
-    // cambiar duración u origen invalida el destino elegido
-    state.destination = state.destination && state.departure && state.destination.code === state.departure.code ? null : state.destination;
+    state.destination = null; // duración cambia => recalcula
     renderDestinationSuggestions();
     validateGenerateButton();
     saveLastSelections();
   };
 
-  depInput.addEventListener("input", onChange);
   durSelect.addEventListener("change", onChange);
   genBtn.addEventListener("click", () => {
     renderBoardingPass();
     setView("boarding");
   });
+  btnPick.addEventListener("click", () => openAirportPicker());
 }
 
 function renderBoardingPass() {
@@ -223,61 +260,129 @@ function renderBoardingPass() {
   bpDur.textContent = `${state.durationMinutes} min`;
 }
 
+// ----------------------------- Selector visual de aeropuertos -----------------------------
+function openAirportPicker() {
+  const overlay = document.getElementById("airport-picker");
+  overlay.classList.add("visible");
+  overlay.setAttribute("aria-hidden", "false");
+  initAirportPickerIfNeeded();
+  setTimeout(() => state.picker.map && state.picker.map.invalidateSize(), 50);
+}
+
+function closeAirportPicker() {
+  const overlay = document.getElementById("airport-picker");
+  overlay.classList.remove("visible");
+  overlay.setAttribute("aria-hidden", "true");
+}
+
+function initAirportPickerIfNeeded() {
+  if (state.picker.map) return;
+  const map = L.map("airport-map", { worldCopyJump: true });
+  const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 7, attribution: "&copy; OpenStreetMap" });
+  tiles.addTo(map);
+  state.picker.map = map;
+
+  // posicion inicial global
+  map.setView([30, 0], 2);
+
+  // crea marcadores
+  AIRPORTS.forEach(a => {
+    const marker = L.circleMarker([a.lat, a.lng], {
+      radius: 6,
+      color: "#76d1ff",
+      weight: 1,
+      fillColor: "#76d1ff",
+      fillOpacity: 0.5,
+    });
+    marker.addTo(map).bindTooltip(`${airportFullName(a)}`, { direction: 'top' });
+    marker.on('click', () => {
+      state.picker.selected = a;
+      updateAirportPickerSelection();
+    });
+    state.picker.markers.set(a.code, marker);
+  });
+
+  // botones overlay
+  document.getElementById('ap-close').onclick = () => closeAirportPicker();
+  document.getElementById('ap-cancel').onclick = () => { state.picker.selected = null; updateAirportPickerSelection(); closeAirportPicker(); };
+  document.getElementById('ap-confirm').onclick = () => {
+    if (!state.picker.selected) return;
+    state.departure = state.picker.selected;
+    state.destination = null;
+    state.picker.selected = null;
+    closeAirportPicker();
+    syncSetupFormFromState();
+  };
+}
+
+function updateAirportPickerSelection() {
+  const sel = document.getElementById('ap-selection');
+  const btn = document.getElementById('ap-confirm');
+  if (state.picker.selected) {
+    sel.textContent = airportFullName(state.picker.selected);
+    btn.disabled = false;
+    // resaltar marcador seleccionado
+    state.picker.markers.forEach((m, code) => {
+      const selected = code === state.picker.selected.code;
+      m.setStyle({
+        radius: selected ? 8 : 6,
+        color: selected ? '#6bdcc2' : '#76d1ff',
+        fillColor: selected ? '#6bdcc2' : '#76d1ff',
+        fillOpacity: selected ? 0.7 : 0.5,
+      });
+    });
+  } else {
+    sel.textContent = 'No seleccionado';
+    btn.disabled = true;
+  }
+}
+
 // ----------------------------- Sugerencias de destino -----------------------------
 function renderDestinationSuggestions() {
   const grid = document.getElementById("dest-suggestions");
   if (!grid) return;
   grid.innerHTML = "";
 
-  const base = state.departure ? AIRPORTS.filter(a => a.code !== state.departure.code) : AIRPORTS;
-  const dur = state.durationMinutes;
-
-  let candidates = [];
-  if (dur <= 30) {
-    const sameCountry = base.filter(a => state.departure && a.country === state.departure.country);
-    const nearby = base.filter(a => ["España","Portugal","Francia"].includes(a.country));
-    candidates = dedupe([...sameCountry, ...nearby]);
-  } else if (dur <= 75) {
-    const europe = base.filter(a => ["España","Portugal","Francia","Reino Unido","Países Bajos","Alemania","Suiza","Austria","Dinamarca","Noruega"].includes(a.country));
-    const usa = base.filter(a => ["EE. UU."].includes(a.country));
-    candidates = dedupe([...(state.departure ? europe : base), ...usa]);
-  } else if (dur <= 120) {
-    const intl = base.filter(a => ["EE. UU.", "Qatar", "EAU", "Turquía", "Japón", "Corea del Sur", "China", "Singapur", "Australia", "Brasil", "Argentina"].includes(a.country));
-    candidates = dedupe([...(state.departure ? intl : base)]);
-  } else {
-    candidates = base;
+  const dep = state.departure;
+  if (!dep) {
+    grid.innerHTML = '<div class="helper">Primero elige el aeropuerto de salida.</div>';
+    return;
   }
 
-  if (state.departure) {
-    const dlat = state.departure.lat;
-    const dlng = state.departure.lng;
-    candidates.sort((a, b) => {
-      const da = Math.hypot(a.lat - dlat, a.lng - dlng);
-      const db = Math.hypot(b.lat - dlat, b.lng - dlng);
-      return (dur >= 75 ? db - da : da - db);
-    });
-  }
+  const base = AIRPORTS.filter(a => a.code !== dep.code);
+  const durMin = state.durationMinutes;
+  const CRUISE_KMH = 820; // velocidad de crucero aproximada
+  const targetKm = (CRUISE_KMH * durMin) / 60;
+  const tolerance = Math.max(200, targetKm * 0.25); // al menos 200km o ±25%
 
-  const top = candidates.slice(0, 8);
+  const scored = base.map(a => {
+    const d = greatCircleDistanceKm(dep.lat, dep.lng, a.lat, a.lng);
+    const diff = Math.abs(d - targetKm);
+    const within = d >= targetKm - tolerance && d <= targetKm + tolerance;
+    return { a, d, diff, within };
+  });
+
+  // prioriza los que caen dentro del rango, ordenados por cercanía a target
+  const within = scored.filter(s => s.within).sort((x, y) => x.diff - y.diff);
+  const outside = scored.filter(s => !s.within).sort((x, y) => x.diff - y.diff);
+  const combined = [...within, ...outside];
+  const top = combined.slice(0, 8);
   top.forEach(a => {
     const card = document.createElement("button");
     card.type = "button";
-    card.className = "suggestion" + (state.destination?.code === a.code ? " selected" : "");
+    card.className = "suggestion" + (state.destination?.code === a.a.code ? " selected" : "");
     const title = document.createElement("div");
     title.className = "title";
-    title.textContent = airportFullName(a);
+    title.textContent = airportFullName(a.a);
     const sub = document.createElement("div");
     sub.className = "subtitle";
-    if (state.departure) {
-      const bearing = Math.round(computeBearingDegrees(state.departure.lat, state.departure.lng, a.lat, a.lng));
-      sub.textContent = `${state.departure.code} → ${a.code} · rumbo ${bearing}°`;
-    } else {
-      sub.textContent = `${a.city}, ${a.country}`;
-    }
+    const bearing = Math.round(computeBearingDegrees(dep.lat, dep.lng, a.a.lat, a.a.lng));
+    const mins = Math.round((a.d / CRUISE_KMH) * 60);
+    sub.textContent = `${dep.code} → ${a.a.code} · ${Math.round(a.d)} km · ~${mins} min · rumbo ${bearing}°`;
     card.appendChild(title);
     card.appendChild(sub);
     card.addEventListener("click", () => {
-      state.destination = a;
+      state.destination = a.a;
       grid.querySelectorAll('.suggestion').forEach(el => el.classList.remove('selected'));
       card.classList.add('selected');
       validateGenerateButton();
@@ -336,13 +441,13 @@ function drawRouteLine() {
     state.routeLine.removeFrom(state.map);
     state.routeLine = null;
   }
-  const line = L.polyline(
-    [
-      [state.departure.lat, state.departure.lng],
-      [state.destination.lat, state.destination.lng],
-    ],
-    { color: "#76d1ff", weight: 3, opacity: 0.9 }
+  // calcula geodésica
+  state.flightPath = generateGreatCirclePoints(
+    state.departure.lat, state.departure.lng,
+    state.destination.lat, state.destination.lng,
+    256
   );
+  const line = L.polyline(state.flightPath, { color: "#76d1ff", weight: 3, opacity: 0.9 });
   line.addTo(state.map);
   state.routeLine = line;
 }
@@ -429,14 +534,29 @@ function startAnimationLoop() {
     const elapsed = state.timer.durationMs - remaining;
     const t = Math.min(1, Math.max(0, elapsed / state.timer.durationMs));
 
-    const lat = interpolateLinear(state.departure.lat, state.destination.lat, t);
-    const lng = interpolateLinear(state.departure.lng, state.destination.lng, t);
-    const bearing = computeBearingDegrees(state.departure.lat, state.departure.lng, state.destination.lat, state.destination.lng);
+    let lat = state.departure.lat;
+    let lng = state.departure.lng;
+    let bearing = computeBearingDegrees(state.departure.lat, state.departure.lng, state.destination.lat, state.destination.lng);
+    if (Array.isArray(state.flightPath) && state.flightPath.length > 1) {
+      const N = state.flightPath.length;
+      const pos = t * (N - 1);
+      const i = Math.max(0, Math.min(N - 2, Math.floor(pos)));
+      const frac = pos - i;
+      const p0 = state.flightPath[i];
+      const p1 = state.flightPath[i + 1];
+      lat = interpolateLinear(p0[0], p1[0], frac);
+      lng = interpolateLinear(p0[1], p1[1], frac);
+      bearing = computeBearingDegrees(p0[0], p0[1], p1[0], p1[1]);
+    }
     createOrUpdatePlaneMarker(lat, lng, bearing);
 
     // Actualiza tiempo cada frame para suavidad (texto muestra h:m:s)
     const disp = document.getElementById("timer-display");
     disp.textContent = formatDurationHMS(remaining);
+
+    // progreso
+    const bar = document.getElementById('progress-bar');
+    if (bar) bar.style.width = `${Math.round(t * 100)}%`;
 
     if (remaining <= 0) {
       endFlight();
@@ -591,11 +711,14 @@ function stopEngine() {
 
 // ----------------------------- Inicio -----------------------------
 function init() {
-  hydrateAirportDatalist();
   restoreLastSelections();
   attachSetupHandlers();
   attachBoardingHandlers();
   syncSetupFormFromState();
+  // abrir picker al entrar si no hay salida seleccionada
+  if (!state.departure) {
+    setTimeout(() => openAirportPicker(), 200);
+  }
 }
 
 document.addEventListener("DOMContentLoaded", init);
