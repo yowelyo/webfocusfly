@@ -1,0 +1,137 @@
+/* Base Theme */
+:root {
+  --bg: #0a0f1e;
+  --bg-elev: #10192f;
+  --text: #e9eefc;
+  --muted: #9fb2d9;
+  --accent: #76d1ff;
+  --accent-2: #8de1c0;
+  --card: rgba(21, 32, 58, 0.65);
+  --border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: radial-gradient(60% 80% at 50% 0%, #0e1b3f 0%, var(--bg) 55%), radial-gradient(40% 30% at 20% 100%, #0b1530 0%, transparent 70%), linear-gradient(180deg, #0a1228, #0a0f1e 60%);
+}
+
+h1, h2, h3 { margin: 0 0 8px; }
+p { margin: 0; opacity: 0.9; }
+
+.view { display: none; height: 100%; }
+.view.visible { display: block; }
+
+.shell { max-width: 900px; margin: 0 auto; padding: 24px; }
+
+.app-header { margin-top: 16px; margin-bottom: 20px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand .logo { font-size: 20px; opacity: 0.9; }
+.brand h1 { font-size: 24px; font-weight: 600; letter-spacing: 0.4px; }
+.tagline { color: var(--muted); margin-top: 4px; }
+
+.card {
+  background: var(--card);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.setup-card { display: grid; gap: 16px; }
+
+.field-group { display: grid; gap: 8px; }
+label { color: var(--muted); font-size: 12px; letter-spacing: 0.4px; }
+input[type="text"], select {
+  width: 100%;
+  padding: 14px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  outline: none;
+}
+input::placeholder { color: #93a6cf; opacity: 0.7; }
+
+.actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+button {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  padding: 12px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+}
+button.primary {
+  background: linear-gradient(135deg, var(--accent) -20%, #4aa6ff 120%);
+  color: #041426;
+  border: none;
+  font-weight: 600;
+}
+button.ghost { background: rgba(255, 255, 255, 0.04); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.app-footer { margin-top: 18px; color: var(--muted); font-size: 12px; text-align: center; }
+
+/* Boarding pass */
+.boarding-card { max-width: 900px; margin: 24px auto; }
+.boarding-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.boarding-airports { display: flex; align-items: center; gap: 16px; font-size: 18px; }
+.boarding-airports .label, .boarding-meta .label { color: var(--muted); font-size: 12px; }
+.boarding-airports .value, .boarding-meta .value { font-size: 22px; font-weight: 600; letter-spacing: 0.6px; }
+.plane-sep { opacity: 0.8; }
+.boarding-actions { margin-top: 16px; display: flex; gap: 12px; justify-content: flex-end; }
+
+/* Map + HUD */
+#map { height: 100%; width: 100%; }
+#view-flight { position: relative; }
+.hud {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, calc(100% - 24px));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(10, 16, 32, 0.56);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.hud .label { color: var(--muted); font-size: 12px; }
+.hud .time { font-size: 24px; font-weight: 700; letter-spacing: 0.6px; }
+.hud-left { display: flex; align-items: center; gap: 16px; }
+.hud-actions { display: flex; gap: 8px; }
+.audio-controls { display: flex; align-items: center; gap: 16px; }
+.audio-controls label { display: inline-flex; align-items: center; gap: 8px; }
+.audio-controls .volume { gap: 8px; }
+
+/* Leaflet plane marker */
+.leaflet-div-icon.plane-marker {
+  background: transparent;
+  border: none;
+}
+.plane {
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%) rotate(0deg);
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+}
+
+/* Responsive */
+@media (max-width: 720px) {
+  .boarding-top { flex-direction: column; align-items: flex-start; }
+  .hud { flex-direction: column; align-items: stretch; }
+  .hud-left { justify-content: space-between; }
+  .audio-controls { justify-content: space-between; }
+}
