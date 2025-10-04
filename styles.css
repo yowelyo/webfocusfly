@@ -58,6 +58,28 @@ input[type="text"], select {
 }
 input::placeholder { color: #93a6cf; opacity: 0.7; }
 
+.helper { color: var(--muted); opacity: 0.85; }
+
+.suggestions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.suggestion {
+  display: grid;
+  gap: 2px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.suggestion:hover { transform: translateY(-1px); background: rgba(255,255,255,0.06); }
+.suggestion.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(118, 209, 255, 0.25) inset; }
+.suggestion .title { font-weight: 600; letter-spacing: 0.3px; }
+.suggestion .subtitle { color: var(--muted); font-size: 12px; }
+
 .actions { display: flex; justify-content: flex-end; margin-top: 8px; }
 button {
   appearance: none;

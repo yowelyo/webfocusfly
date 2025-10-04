@@ -37,12 +37,7 @@
           <div class="card setup-card">
             <div class="field-group">
               <label for="input-departure">Aeropuerto de salida</label>
-              <input id="input-departure" list="airports-list" placeholder="Ej. MAD, JFK, CDG…" autocomplete="off" />
-            </div>
-
-            <div class="field-group">
-              <label for="input-destination">Destino</label>
-              <input id="input-destination" list="airports-list" placeholder="Ej. BCN, LHR, NRT…" autocomplete="off" />
+              <input id="input-departure" list="airports-list" placeholder="Escribe código o nombre (ej. MAD o Madrid)" autocomplete="off" />
             </div>
 
             <datalist id="airports-list"></datalist>
@@ -56,6 +51,12 @@
                 <option value="90">90 min</option>
                 <option value="120">120 min</option>
               </select>
+            </div>
+
+            <div class="field-group">
+              <label>Opciones de destino sugeridas según la duración</label>
+              <div id="dest-suggestions" class="suggestions-grid"></div>
+              <small class="helper">Elige un destino sugerido; cambia la duración para ver otras opciones.</small>
             </div>
 
             <div class="actions">

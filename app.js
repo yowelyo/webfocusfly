@@ -129,9 +129,8 @@ function searchAirportFromInput(value) {
   );
 }
 
-function airportLabel(a) {
-  return `${a.code} — ${a.city}, ${a.country}`;
-}
+function airportShortLabel(a) { return `${a.code} — ${a.city}, ${a.country}`; }
+function airportFullName(a) { return `${a.name} (${a.code}) — ${a.city}, ${a.country}`; }
 
 function saveLastSelections() {
   try {
@@ -177,13 +176,12 @@ function hydrateAirportDatalist() {
 
 function syncSetupFormFromState() {
   const depInput = document.getElementById("input-departure");
-  const dstInput = document.getElementById("input-destination");
   const durSelect = document.getElementById("select-duration");
 
-  depInput.value = state.departure ? airportLabel(state.departure) : "";
-  dstInput.value = state.destination ? airportLabel(state.destination) : "";
+  depInput.value = state.departure ? airportFullName(state.departure) : "";
   durSelect.value = String(state.durationMinutes);
 
+  renderDestinationSuggestions();
   validateGenerateButton();
 }
 
@@ -195,20 +193,20 @@ function validateGenerateButton() {
 
 function attachSetupHandlers() {
   const depInput = document.getElementById("input-departure");
-  const dstInput = document.getElementById("input-destination");
   const durSelect = document.getElementById("select-duration");
   const genBtn = document.getElementById("btn-generate");
 
   const onChange = () => {
     state.departure = searchAirportFromInput(depInput.value);
-    state.destination = searchAirportFromInput(dstInput.value);
     state.durationMinutes = parseInt(durSelect.value, 10);
+    // cambiar duración u origen invalida el destino elegido
+    state.destination = state.destination && state.departure && state.destination.code === state.departure.code ? null : state.destination;
+    renderDestinationSuggestions();
     validateGenerateButton();
     saveLastSelections();
   };
 
   depInput.addEventListener("input", onChange);
-  dstInput.addEventListener("input", onChange);
   durSelect.addEventListener("change", onChange);
   genBtn.addEventListener("click", () => {
     renderBoardingPass();
@@ -220,9 +218,84 @@ function renderBoardingPass() {
   const bpDep = document.getElementById("bp-departure");
   const bpDst = document.getElementById("bp-destination");
   const bpDur = document.getElementById("bp-duration");
-  bpDep.textContent = state.departure ? `${state.departure.code} — ${state.departure.city}` : "—";
-  bpDst.textContent = state.destination ? `${state.destination.code} — ${state.destination.city}` : "—";
+  bpDep.textContent = state.departure ? airportFullName(state.departure) : "—";
+  bpDst.textContent = state.destination ? airportFullName(state.destination) : "—";
   bpDur.textContent = `${state.durationMinutes} min`;
+}
+
+// ----------------------------- Sugerencias de destino -----------------------------
+function renderDestinationSuggestions() {
+  const grid = document.getElementById("dest-suggestions");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  const base = state.departure ? AIRPORTS.filter(a => a.code !== state.departure.code) : AIRPORTS;
+  const dur = state.durationMinutes;
+
+  let candidates = [];
+  if (dur <= 30) {
+    const sameCountry = base.filter(a => state.departure && a.country === state.departure.country);
+    const nearby = base.filter(a => ["España","Portugal","Francia"].includes(a.country));
+    candidates = dedupe([...sameCountry, ...nearby]);
+  } else if (dur <= 75) {
+    const europe = base.filter(a => ["España","Portugal","Francia","Reino Unido","Países Bajos","Alemania","Suiza","Austria","Dinamarca","Noruega"].includes(a.country));
+    const usa = base.filter(a => ["EE. UU."].includes(a.country));
+    candidates = dedupe([...(state.departure ? europe : base), ...usa]);
+  } else if (dur <= 120) {
+    const intl = base.filter(a => ["EE. UU.", "Qatar", "EAU", "Turquía", "Japón", "Corea del Sur", "China", "Singapur", "Australia", "Brasil", "Argentina"].includes(a.country));
+    candidates = dedupe([...(state.departure ? intl : base)]);
+  } else {
+    candidates = base;
+  }
+
+  if (state.departure) {
+    const dlat = state.departure.lat;
+    const dlng = state.departure.lng;
+    candidates.sort((a, b) => {
+      const da = Math.hypot(a.lat - dlat, a.lng - dlng);
+      const db = Math.hypot(b.lat - dlat, b.lng - dlng);
+      return (dur >= 75 ? db - da : da - db);
+    });
+  }
+
+  const top = candidates.slice(0, 8);
+  top.forEach(a => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "suggestion" + (state.destination?.code === a.code ? " selected" : "");
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = airportFullName(a);
+    const sub = document.createElement("div");
+    sub.className = "subtitle";
+    if (state.departure) {
+      const bearing = Math.round(computeBearingDegrees(state.departure.lat, state.departure.lng, a.lat, a.lng));
+      sub.textContent = `${state.departure.code} → ${a.code} · rumbo ${bearing}°`;
+    } else {
+      sub.textContent = `${a.city}, ${a.country}`;
+    }
+    card.appendChild(title);
+    card.appendChild(sub);
+    card.addEventListener("click", () => {
+      state.destination = a;
+      grid.querySelectorAll('.suggestion').forEach(el => el.classList.remove('selected'));
+      card.classList.add('selected');
+      validateGenerateButton();
+      saveLastSelections();
+    });
+    grid.appendChild(card);
+  });
+}
+
+function dedupe(list) {
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    if (seen.has(item.code)) continue;
+    seen.add(item.code);
+    out.push(item);
+  }
+  return out;
 }
 
 function attachBoardingHandlers() {
